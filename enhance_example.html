@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script language="javascript" src="https://cryptopro.ru/sites/default/files/products/cades/cadesplugin_api.js"></script>
+</head>
+<body>
+    <div>
+        <h2>Пример усовершенствования подписи</h2>
+
+        <div>
+            <label for="uploadFile">Подписываемый документ:</label>
+            <input type="file" id="uploadFile">
+        <div>
+        </div>
+            <label for="uploadSignature">Файл подписи (sig, p7s...):</label>
+            <input type="file" id="uploadSignature">
+        </div>
+        <div class="mb-6">
+            <label for="TSPAddr">Адрес службы TSP:</label>
+            <input type="text" id="TSPAddr" placeholder="http://pki.tax.gov.ru/tsp/tsp.srf" style="width: 40ch">
+        </div>
+
+        <button onclick="run()">
+            Усовершенствовать подпись
+        </button>
+
+        <div>
+            <h3>Результат:</h3>
+            <div id="signature">
+                <span>Подпись появится здесь...</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="messageBox" class="message-box">
+        <div class="message-box-content">
+            <h3 id="messageBoxTitle"></h3>
+            <p id="messageBoxContent" class="mb-4"></p>
+        </div>
+    </div>
+
+    <script>
+    if (typeof cadesplugin === 'undefined') { alert("Ошибка загрузки плагина"); }
+
+    function showMessageBox(title, message) {
+        document.getElementById("messageBoxTitle").innerText = title;
+        document.getElementById("messageBoxContent").innerText = message;
+        document.getElementById("messageBox").style.display = "flex";
+    }
+
+    function run() {
+        if (!window.FileReader) {
+            showMessageBox("Ошибка", 'FileAPI не поддерживается бразуером.');
+            return;
+        }
+
+        var oFile1 = document.getElementById("uploadFile").files[0];
+        var oFile2 = document.getElementById("uploadSignature").files[0];
+
+        if (!oFile1 || !oFile2) {
+            showMessageBox("Ошибка", "Необходимо выбрать оба файла.");
+            return;
+        }
+
+        if (typeof (new FileReader().readAsDataURL) != "function") {
+            showMessageBox("Ошибка", "Метод readAsDataURL() не поддерживается в FileReader.");
+            return;
+        }
+
+        var sBase64Data1 = null;
+        var sBase64Data2 = null;
+        var filesLoadedCount = 0;
+        var totalFilesToLoad = 2;
+
+        const commonOnLoad = function(oFREvent, fileIndex) {
+            var header = ";base64,";
+            var sFileData = oFREvent.target.result;
+            var sBase64Data = sFileData.substr(sFileData.indexOf(header) + header.length);
+            if (fileIndex === 1) {
+                sBase64Data1 = sBase64Data;
+            } else if (fileIndex === 2) {
+                sBase64Data2 = sBase64Data;
+            }
+            filesLoadedCount++;
+            if (filesLoadedCount === totalFilesToLoad) {
+                var oTSPAddr = document.getElementById("TSPAddr");
+                var sTSPAddr = oTSPAddr.value.trim();
+                if ("" == sTSPAddr) {
+                    showMessageBox("Ошибка", "Не указан адрес службы TSP.");
+                    return;
+                }
+                EnhanceSignature(sBase64Data1, sBase64Data2, sTSPAddr);
+            }
+        };
+
+        var oFReader1 = new FileReader();
+        oFReader1.onload = function(e) { commonOnLoad(e, 1); };
+        oFReader1.readAsDataURL(oFile1);
+
+        var oFReader2 = new FileReader();
+        oFReader2.onload = function(e) { commonOnLoad(e, 2); };
+        oFReader2.readAsDataURL(oFile2);
+    }
+    function EnhanceSignature(base64File, base64Signature, TSPAddr) {
+        return cadesplugin.async_spawn(function* (args) {
+            var oSignedData = yield cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
+            yield oSignedData.propset_ContentEncoding(cadesplugin.CADESCOM_BASE64_TO_BINARY);
+            yield oSignedData.propset_Content(base64File);
+            try {
+                yield oSignedData.VerifyCades(base64Signature, cadesplugin.CADESCOM_CADES_BES, true);
+            } catch (err) {
+                showMessageBox("Ошибка", "Не удалось проверить исходную подпись: " + cadesplugin.getLastError(err));
+                return;
+            }
+            try {
+                var sSignedMessage = yield oSignedData.EnhanceCades(cadesplugin.CADESCOM_CADES_X_LONG_TYPE_1, TSPAddr, 0);
+                document.getElementById("signature").innerHTML = sSignedMessage;
+                downloadBase64AsBinary(sSignedMessage, "подпись.sig");
+                showMessageBox("Успешно", "Подпись усовершенствована!");
+            } catch (err) {
+                showMessageBox("Ошибка", "Не удалось усовершенствовать подпись: " + cadesplugin.getLastError(err));
+                return;
+            }
+
+            yield oStore.Close();
+        });
+    }
+    function downloadBase64AsBinary(base64Data, filename) {
+        const binaryString = atob(base64Data);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const blob = new Blob([bytes], { type: 'application/octet-stream' });
+
+        // Create a link element
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+
+        // Append the link to the body, click it, and then remove it
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href); // Clean up the URL object
+    }
+    </script>
+</body>
+</html>
