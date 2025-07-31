@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hashing Test</title>
+    <script language="javascript" src="https://cryptopro.ru/sites/default/files/products/cades/cadesplugin_api.js"></script>
+</head>
+<body>
+
+    <div>
+        <h1>CAdESCOM HashedData Test</h1>
+        <button id="runButton">
+            Начать проверку
+        </button>
+    </div>
+
+    <!-- Message Box HTML -->
+    <div id="messageBox" style="display: none;">
+        <div id="messageBoxContent">
+            <h2 id="messageBoxTitle"></h2>
+            <p id="messageBoxBody"></p>
+        </div>
+    </div>
+
+    <script>
+        // Function to show the custom message box
+        function showMessageBox(title, message) {
+            document.getElementById("messageBoxTitle").innerText = title;
+            document.getElementById("messageBoxBody").innerText = message;
+            document.getElementById("messageBox").style.display = "block"; // Use block display
+        }
+
+        // The provided run function
+        function run() {
+            // Check if cadesplugin is available before proceeding
+            if (typeof cadesplugin === 'undefined') {
+                showMessageBox("Ошибка", "cadesplugin_api.js is not loaded or cadesplugin is not defined.");
+                return;
+            }
+
+            cadesplugin.async_spawn(function* (args) {
+                var oHashedData;
+                try {
+                    oHashedData = yield cadesplugin.CreateObjectAsync("CAdESCOM.HashedData");
+                } catch (err) {
+                    showMessageBox("Ошибка", "Failed to create CAdESCOM.HashedData object: " + cadesplugin.getLastError(err));
+                    return;
+                }
+
+                try {
+                    yield oHashedData.propset_Algorithm(cadesplugin.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256);
+                    yield oHashedData.propset_DataEncoding(cadesplugin.CADESCOM_BASE64_TO_BINARY);
+                } catch (err) {
+                    showMessageBox("Ошибка", "Failed to set HashedData properties: " + cadesplugin.getLastError(err));
+                    return;
+                }
+
+                var hashed_string = `<?xml version="1.0" encoding="UTF-8"?>
+<statementFormTechErr xmlns:com="http://rosreestr.ru/services/v0.25/commons/Commons" xmlns:subj="http://rosreestr.ru/services/v0.25/commons/Subjects" xmlns="http://rosreestr.ru/services/v0.25/TStatement" xmlns:stCom="http://rosreestr.ru/services/v0.25/TStatementCommons" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://rosreestr.ru/services/v0.25/TStatement" xmlns:ns2="http://rosreestr.ru/services/v0.25/commons/Documents" xmlns:ns3="http://rosreestr.ru/services/v0.25/commons/Commons" _id="_id0">
+  <header>
+    <stCom:actionCode>123456789012</stCom:actionCode>
+    <stCom:statementType>123456789012</stCom:statementType>
+    <stCom:creationDate>2025-07-30T14:18:14+00:00</stCom:creationDate>
+  </header>
+  <subjects>
+    <declarant _id="_id1">
+      <subj:registrar>
+        <subj:surname>Иванов</subj:surname>
+        <subj:firstname>Иван</subj:firstname>
+        <subj:login>Иванович</subj:login>
+        <subj:department>Управление Федеральной службы государственной регистрации, кадастра и картографии по Республике Калмыкия</subj:department>
+        <subj:role>01</subj:role>
+      </subj:registrar>
+    </declarant>
+  </subjects>
+  <statementDetails>
+    <registryAction>
+      <registryErrorActionTechErr>
+        <cadastralNumber>12:34:567890:123</cadastralNumber>
+        <errRecord>Версия схемы</errRecord>
+        <corrRecord></corrRecord>
+        <xPath>/record_info/build</xPath>
+      </registryErrorActionTechErr>
+    </registryAction>
+    <note>
+      <com:code>1</com:code>
+      <com:text/>
+    </note>
+  </statementDetails>
+</statementFormTechErr>
+`;
+                try {
+                    yield oHashedData.Hash(hashed_string);
+                    showMessageBox("Успешно", "Hash computed: " + (yield oHashedData.Value));
+                } catch (err) {
+                    showMessageBox("Ошибка", "Failed to compute message hash: " + cadesplugin.getLastError(err));
+                    return;
+                }
+            });
+        }
+
+        // Add event listener to the button to run the function
+        document.getElementById("runButton").addEventListener("click", run);
+    </script>
+</body>
+</html>
